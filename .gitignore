@@ -1,2 +1,5 @@
 .env
 test.ipynb
+./data
+data
+**.pyc

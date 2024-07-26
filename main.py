@@ -12,7 +12,8 @@ import requests
 from auth import get_current_user
 import ast
 
-from utils.clova_studio import get_reaction, get_emotion
+from utils.clova_studio import get_reaction, get_emotion, get_embedding
+from utils.milvus import get_memory
 
 import dotenv
 dotenv.load_dotenv()
@@ -66,6 +67,12 @@ def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)):
         result["reaction"].append({"emotion_type": emotino_name[emotion_i], "content":emotion_reaction_i})
 
     return result
+
+@app.post("/memory")
+def search_memory(content: str, user_id = Depends(get_current_user)):
+    memories = get_memory(content)
+    return memories[0][0]["entity"]["text"]
+
 
 @app.get("/diary/{diary_id}")
 def read_diary(diary_id: int,  user_id = Depends(get_current_user)):
