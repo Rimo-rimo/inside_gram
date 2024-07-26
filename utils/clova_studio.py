@@ -21,7 +21,29 @@ reaction_headers = {
     'Content-Type': 'application/json; charset=utf-8',
     }
 
+
+embedding_headers = {
+    'X-NCP-CLOVASTUDIO-API-KEY': CLOVASTUDIO_API_KEY,
+    'X-NCP-APIGW-API-KEY': APIGW_API_KEY,
+    'X-NCP-CLOVASTUDIO-REQUEST-ID': "4f5f51a0-acf0-484e-84c9-46cf2aa067f3",
+    'Content-Type': 'application/json; charset=utf-8',
+    }
+
 emotion_type_dict = {"joy":Joy, "sadness":Sadness, "anger":Anger, "anxiety":Anxiety}
+
+def get_emotion(content):
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages = EmotionClassification(content).message,
+        temperature=1.0,
+        max_tokens=256,
+        top_p=1,
+        frequency_penalty=0,
+        presence_penalty=0
+    )
+
+    return json.loads(response.json())["choices"][0]["message"]["content"]
 
 def get_reaction(emotion_type, content):
 
@@ -43,17 +65,12 @@ def get_reaction(emotion_type, content):
 
     return reaction
 
-def get_emotion(content):
-    # message = EmotionClassification(content).message[0]
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages = EmotionClassification(content).message,
-        temperature=1.0,
-        max_tokens=256,
-        top_p=1,
-        frequency_penalty=0,
-        presence_penalty=0
-    )
+def get_embedding(content):
 
-    return json.loads(response.json())["choices"][0]["message"]["content"]
+    request_data = {
+        "text": content
+        }
+    
+    reaction = requests.post("https://clovastudio.apigw.ntruss.com/testapp/v1/api-tools/embedding/v2/4aacadacd0c048e98e14e4870c2f2c93", headers=embedding_headers, json=request_data).json()["result"]["embedding"]
+    return reaction
