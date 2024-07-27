@@ -5,7 +5,7 @@ import json
 from openai import OpenAI
 
 from utils.prompt import Joy, Sadness, Anger, Anxiety, EmotionClassification
-from utils.prompt import Joy_, Sadness_, Anger_, Anxiety_
+from utils.prompt import Joy_, Sadness_, Anger_, Anxiety_, MemoryGrandma
 
 dotenv.load_dotenv()
 client = OpenAI()
@@ -78,6 +78,24 @@ def get_reaction_(emotion_type, content):
         }
     reaction = requests.post("https://clovastudio.stream.ntruss.com" + '/testapp/v1/chat-completions/HCX-DASH-001', headers=reaction_headers, json=request_data).json()["result"]["message"]["content"]
     return reaction
+
+def get_memory_grandma_reaction(content_1, content_2):
+    prompt = MemoryGrandma(content_1, content_2)
+    request_data = {
+        'messages': [{"role":"system","content":prompt.system_prompt},{"role":"user","content":prompt.user_prompt_1},{"role":"assistant","content":prompt.assistant_1},{"role":"user","content":prompt.user_prompt_2}],
+        'topP': 0.8,
+        'topK': 0,
+        'maxTokens': 256,
+        'temperature': 0.8,
+        'repeatPenalty': 5.0,
+        'stopBefore': [],
+        'includeAiFilters': True,
+        'seed': 0
+        }
+    reaction = requests.post("https://clovastudio.stream.ntruss.com" + '/testapp/v1/chat-completions/HCX-DASH-001', headers=reaction_headers, json=request_data).json()["result"]["message"]["content"]
+    return reaction
+    # pass
+
 
 
 def get_embedding(content):

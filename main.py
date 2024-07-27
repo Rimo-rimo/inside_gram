@@ -13,7 +13,7 @@ import requests
 from auth import get_current_user
 import ast
 from typing import List, Dict
-from utils.clova_studio import get_reaction, get_emotion, get_embedding, get_reaction_
+from utils.clova_studio import get_reaction, get_emotion, get_embedding, get_reaction_, get_memory_grandma_reaction
 from utils.milvus import get_memory
 from collections import Counter
 
@@ -28,6 +28,35 @@ app = FastAPI()
 
 emotion_dict = {"기쁨":1, "슬픔":2, "분노":3, "불안":4}
 emotino_name = {1:"joy", 2:"sadness", 3:"anger", 4:"anxiety"}
+
+
+
+
+class DiaryResponse(BaseModel):
+    user_id: str = Field(..., description="유저 고유 번호")
+    diary_id: int = Field(..., description="일기 고유 번호")
+    content: str = Field(..., description="작성한 일기")
+    memory_content: Optional[str] = None
+    main_emotion: Optional[str] = None
+    created_at: datetime
+
+class EmotionReaction(BaseModel):
+    emotion_type: str
+    content: str
+
+class DiaryItemResponse(DiaryResponse):
+    reaction: List[EmotionReaction]
+
+
+class MainEmotionResponse(BaseModel):
+    main_emotion:str = Field(..., description="작성한 일기", example="joy")
+
+
+
+
+
+
+
 
 class DiaryCreate(BaseModel):
     content: str
@@ -53,31 +82,11 @@ class DiaryItem(BaseModel):
     memory_content: str
     main_emotion: str
 
-class MainEmotionResponse(BaseModel):
-    main_emotion:str
-
 class MemoryContent(BaseModel):
     memory_content:str
 
-# class DiaryListItem(BaseModel):
-#     diary_id: int
-#     content: str
-#     created_at: datetime
-#     memory_content: str
-#     main_emotion: str
-
 class DiaryListRquest(BaseModel):
     data : List[DiaryItem]
-
-a = [{'emotion_type':'joy', 'content': "우와 대박이당!"},{'emotion_type':'sadness', 'content': "우와 슬프당!"}]
-
-class DiaryResponse(BaseModel):
-    user_id: str = Field(..., description="유저 고유 번호",example="12sdf-234...12sdf")
-    diary_id: int = Field(..., description="일기 고유 번호",example="1")
-    content: str = Field(..., description="작성한 일기",example="집중하자 집중해! 이것은 일기다")
-    reaction: List[EmotionReaction] = Field(..., description="감정이들의 반응",example=a)
-    main_emotion: str = Field(..., description="메인 감정",example="joy")
-    memory_content: str = Field(..., example="오늘은 엄청 집중이 잘 되는 날이다.")
 
 @app.get("/test/get_token")
 def get_user_info():
@@ -86,45 +95,29 @@ def get_user_info():
 
 # 다이어리 리스트
 @app.get("/diary") 
-def get_diary(user_id = Depends(get_current_user)):
+def get_diary(user_id = Depends(get_current_user)) -> List[DiaryResponse]:
     response = (supabase.table("diary").select("*").eq("user_id", user_id).execute())
-    # result = []
-    # for i in response.data:
-    #     result.append(i["diary_id"])
-    
-    # result = response.data
-    # for i in result:
-    #     diary_data = supabase.table("diary").select("*").eq("user_id", user_id).eq("diary_id", i["diary_id"]).execute()
-    #     i["main_emotion"] = diary_data
-    # result["main_emotion"]
     return response.data
 
-@app.get("/main_emotion")
-def get_main_emotion(user_id = Depends(get_current_user)) -> MainEmotionResponse:
-    response = (supabase.table("diary").select("*").eq("user_id", user_id).execute()).data[:15]
-    # emotion_list = Counter([i["main_emotion"] for i in response])
-    # emotion_list = dict(sorted(emotion_list.items(), key=lambda item: item[1]))
-    if len(response) <= 0:
-        return {"main_emotion":"joy"}
-    else:
-        emotion_list = Counter([i["main_emotion"] for i in response])
-        emotion_list = dict(sorted(emotion_list.items(), key=lambda item: item[1], reverse=True))
-        main_emotion = list(emotion_list.keys())[0]
-        return {"main_emotion":main_emotion}
-
-@app.get("/memory")
-def get_memory_content(user_id = Depends(get_current_user)) -> MemoryContent:
-    response = (supabase.table("diary").select("*").eq("user_id", user_id).execute()).data[:2]
-    # emotion_list = Counter([i["main_emotion"] for i in response])
-    # emotion_list = dict(sorted(emotion_list.items(), key=lambda item: item[1]))
-    if len(response) <= 0:
-        return "아직 일기가 없습니다."
-    else:
-        return {"memory_content":response[0]["memory_content"]}
+# 다이어리 세부 조회
+@app.get("/diary/{diary_id}")
+def read_diary(diary_id: int,  user_id = Depends(get_current_user)) -> DiaryItemResponse:
+    diary_data = supabase.table("diary").select("*").eq("user_id", user_id).eq("diary_id", diary_id).execute()
+    # if diary_data.data:
+    result = {"user_id":user_id, "diary_id": diary_data.data[0]["diary_id"], "reaction":[], "content": diary_data.data[0]["content"], "main_emotion":diary_data.data[0]["main_emotion"], "memory_content":diary_data.data[0]["memory_content"]}
+    diary_emotion_data = (supabase.table("diary_emotion").select("*").eq("diary_id", diary_id).execute())
+    for i in diary_emotion_data.data:
+        diary_emotion_id = i["diary_emotion_id"]
+        emotion_reaction_data = (supabase.table("emotion_reaction").select("*").eq("diary_emotion_id", diary_emotion_id).execute())
+        re = {"emotion_type": emotino_name[i["emotion_id"]], "content":emotion_reaction_data.data[0]["reaction"]}
+        result["reaction"].append(re)
+    
+    result["created_at"] = diary_data.data[0]["created_at"]
+    return result
 
 # 다이어리 생성
 @app.post("/diary")
-def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> DiaryResponse:
+def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> DiaryItemResponse:
     diary_data = {"user_id": user_id, "content": data.content}
 
     # 일기 DB 저장
@@ -156,7 +149,7 @@ def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> Diar
     for emotion_i, emotion_reaction_i in zip(emotions_num, emotion_reaction_list):
         result["reaction"].append({"emotion_type": emotino_name[emotion_i], "content":emotion_reaction_i})
     
-    memory_content = search_memory(data.content, user_id)
+    memory_content = get_memory(data.content, user_id)[0][0]["entity"]["text"]
 
     response = (
         supabase.table("diary")
@@ -166,71 +159,37 @@ def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> Diar
     )
 
     result["memory_content"] = memory_content
+    result["created_at"] = emotion_reaction_db_response.data[0]["created_at"]
     return result
 
-# @app.post("/memory")
-def search_memory(content: str, user_id = Depends(get_current_user)):
-    memories = get_memory(content, user_id)
-    return memories[0][0]["entity"]["text"]
+@app.get("/main_emotion")
+def get_main_emotion(user_id = Depends(get_current_user)) -> MainEmotionResponse:
+    response = (supabase.table("diary").select("*").eq("user_id", user_id).execute()).data[:15]
+    if len(response) <= 0:
+        return {"main_emotion":"joy"}
+    else:
+        emotion_list = Counter([i["main_emotion"] for i in response])
+        emotion_list = dict(sorted(emotion_list.items(), key=lambda item: item[1], reverse=True))
+        main_emotion = list(emotion_list.keys())[0]
+        return {"main_emotion":main_emotion}
 
-# @app.get("/test/test")
-# def test():
-#     user_id = "2b2b145c-5cdd-4fa7-9638-e0202f994147"
-#     response = (supabase.table("diary").select("*").eq("user_id", user_id).execute())
-#     diary_id_list = []
-#     for i in response.data:
-#         # diary_id_list.append(i["diary_id"])
-#         memory_content = search_memory(i["content"], user_id)
-#         response = (
-#             supabase.table("diary")
-#             .update({"memory_content": memory_content})
-#             .eq("diary_id", i["diary_id"])
-#             .execute()
-#         )
-#         print(response)
+@app.get("/memory")
+def get_memory_content(user_id = Depends(get_current_user)) -> MemoryContent:
+    response = (supabase.table("diary").select("*").eq("user_id", user_id).execute()).data[:2]
 
-    # rr = []
-    # try:
-    #     for i in diary_id_list:
-    #         diary_emotion_data = (supabase.table("diary_emotion").select("*").eq("diary_id", i).execute())
-    #         diary_emotion_id = diary_emotion_data.data[0]["emotion_id"]
-    #         print(diary_emotion_id)
-    #         # print(diary_emotion_id)
-    #         # emotion_reaction_data = (supabase.table("emotion_reaction").select("*").eq("diary_emotion_id", diary_emotion_id).execute())
-    #         # rr.append(emotion_reaction_data)
-    #         # response = (
-    #         #     supabase.table("diary")
-    #         #     .update({"main_emotion": emotino_name[diary_emotion_id]})
-    #         #     .eq("diary_id", i)
-    #         #     .execute()
-    #         # )
-    # except:
-    #     pass
-    # return "ss"
+    if len(response) <= 0:
+        return "아직 일기가 없습니다."
+    else:
+        return {"memory_content":response[0]["memory_content"]}
 
-"""
-class DiaryResponse(BaseModel):
-    user_id: str = Field(..., description="유저 고유 번호",example="12sdf-234...12sdf")
-    diary_id: int = Field(..., description="일기 고유 번호",example="1")
-    content: str = Field(..., description="작성한 일기",example="집중하자 집중해! 이것은 일기다")
-    reaction: List[EmotionReaction] = Field(..., description="감정이들의 반응",example=a)
-    main_emotion: str = Field(..., description="메인 감정",example="joy")
-    memory_content: str = Field(..., example="오늘은 엄청 집중이 잘 되는 날이다.")
-"""
+# @app.get("/memoryRAG")
+# def get_memory_content(user_id = Depends(get_current_user)) -> MemoryContent:
+#     response = (supabase.table("diary").select("*").eq("user_id", user_id).execute()).data[:2]
+#     # emotion_list = Counter([i["main_emotion"] for i in response])
+#     # emotion_list = dict(sorted(emotion_list.items(), key=lambda item: item[1]))
+#     if len(response) <= 0:
+#         return "아직 일기가 없습니다."
+#     else:
+#         result = get_memory_grandma_reaction(response[0]["content"], response[0]["memory_content"])
+#         return {"memory_content":result}
 
-
-# 다이어리 세부 조회
-@app.get("/diary/{diary_id}")
-def read_diary(diary_id: int,  user_id = Depends(get_current_user)) -> DiaryResponse:
-    diary_data = supabase.table("diary").select("*").eq("user_id", user_id).eq("diary_id", diary_id).execute()
-    # if diary_data.data:
-    result = {"user_id":user_id, "diary_id": diary_data.data[0]["diary_id"], "reaction":[], "content": diary_data.data[0]["content"], "main_emotion":diary_data.data[0]["main_emotion"], "memory_content":diary_data.data[0]["memory_content"]}
-    diary_emotion_data = (supabase.table("diary_emotion").select("*").eq("diary_id", diary_id).execute())
-    for i in diary_emotion_data.data:
-        diary_emotion_id = i["diary_emotion_id"]
-        emotion_reaction_data = (supabase.table("emotion_reaction").select("*").eq("diary_emotion_id", diary_emotion_id).execute())
-        re = {"emotion_type": emotino_name[i["emotion_id"]], "content":emotion_reaction_data.data[0]["reaction"]}
-        result["reaction"].append(re)
-    return result
-    # else:
-    #     return diary_data.data
