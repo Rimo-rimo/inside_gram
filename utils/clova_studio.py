@@ -5,9 +5,9 @@ import json
 from openai import OpenAI
 
 from utils.prompt import Joy, Sadness, Anger, Anxiety, EmotionClassification
+from utils.prompt import Joy_, Sadness_, Anger_, Anxiety_
 
 dotenv.load_dotenv()
-
 client = OpenAI()
 
 # 환경 변수 로드
@@ -21,7 +21,6 @@ reaction_headers = {
     'Content-Type': 'application/json; charset=utf-8',
     }
 
-
 embedding_headers = {
     'X-NCP-CLOVASTUDIO-API-KEY': CLOVASTUDIO_API_KEY,
     'X-NCP-APIGW-API-KEY': APIGW_API_KEY,
@@ -29,7 +28,8 @@ embedding_headers = {
     'Content-Type': 'application/json; charset=utf-8',
     }
 
-emotion_type_dict = {"joy":Joy, "sadness":Sadness, "anger":Anger, "anxiety":Anxiety}
+# emotion_type_dict = {"joy":Joy, "sadness":Sadness, "anger":Anger, "anxiety":Anxiety}
+emotion_type_dict = {"joy":Joy_, "sadness":Sadness_, "anger":Anger_, "anxiety":Anxiety_}
 
 def get_emotion(content):
 
@@ -60,9 +60,23 @@ def get_reaction(emotion_type, content):
         'includeAiFilters': True,
         'seed': 0
         }
-
     reaction = requests.post("https://clovastudio.stream.ntruss.com" + '/testapp/v1/chat-completions/HCX-DASH-001', headers=reaction_headers, json=request_data).json()["result"]["message"]["content"]
+    return reaction
 
+def get_reaction_(emotion_type, content):
+    prompt = emotion_type_dict[emotion_type](content)
+    request_data = {
+        'messages': [{"role":"system","content":prompt.system_prompt},{"role":"user","content":prompt.user_prompt_1},{"role":"assistant","content":prompt.assistant_1},{"role":"user","content":prompt.user_prompt_2}],
+        'topP': 0.8,
+        'topK': 0,
+        'maxTokens': 256,
+        'temperature': 0.8,
+        'repeatPenalty': 5.0,
+        'stopBefore': [],
+        'includeAiFilters': True,
+        'seed': 0
+        }
+    reaction = requests.post("https://clovastudio.stream.ntruss.com" + '/testapp/v1/chat-completions/HCX-DASH-001', headers=reaction_headers, json=request_data).json()["result"]["message"]["content"]
     return reaction
 
 

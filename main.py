@@ -13,7 +13,7 @@ import requests
 from auth import get_current_user
 import ast
 from typing import List, Dict
-from utils.clova_studio import get_reaction, get_emotion, get_embedding
+from utils.clova_studio import get_reaction, get_emotion, get_embedding, get_reaction_
 from utils.milvus import get_memory
 from collections import Counter
 
@@ -140,7 +140,7 @@ def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> Diar
         # 일기-감정 DB 저장
         diary_emotion_db_response = supabase.table("diary_emotion").insert({"diary_id": diary_db_response.data[0]["diary_id"], "emotion_id": emotion}).execute()
         # 감정 반응 생성
-        emotion_reaction = get_reaction(emotino_name[emotion], data.content)
+        emotion_reaction = get_reaction_(emotino_name[emotion], data.content)
         emotion_reaction_list.append(emotion_reaction)
         # 감정 반응 저장
         emotion_reaction_db_response = supabase.table("emotion_reaction").insert({"diary_emotion_id": diary_emotion_db_response.data[0]["diary_emotion_id"], "reaction": emotion_reaction}).execute()
