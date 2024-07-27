@@ -121,7 +121,7 @@ def get_memory_content(user_id = Depends(get_current_user)) -> MemoryContent:
         return "아직 일기가 없습니다."
     else:
         return {"memory_content":response[0]["memory_content"]}
-        
+
 # 다이어리 생성
 @app.post("/diary")
 def create_diary(data: DiaryCreate, user_id = Depends(get_current_user)) -> DiaryResponse:
